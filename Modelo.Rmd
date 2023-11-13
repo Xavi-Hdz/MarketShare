@@ -1,0 +1,284 @@
+---
+output: pdf_document
+---
+
+```{r}
+library(knitr)
+library(xtable)
+library(readxl)
+library(printr)
+library(effects)
+library(car)
+library(AER)
+library(broom)
+library(tseries)
+library(Metrics)
+library(see)
+library(performance)
+library(stats)
+library(lmtest)
+library(stargazer)
+library(ggplot2)
+library(bookdown)
+library(olsrr)
+library(systemfit)
+library(plm)
+library(patchwork)
+library(nortest)
+library(robustbase)
+library(areaplot)
+
+
+muestra <- read_excel("C:/Users/puerc/OneDrive/Documentos/Eric/UNI/PP/datos.xlsx")
+attach(muestra)
+```
+```{r}
+ggplot(muestra, aes(x = GWP, y = MarketShare,
+                  color = YEAR)) +
+  geom_point() +
+  labs(title = "Patrón por año") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(muestra, aes(x = GWP, y = MarketShare,
+                    color = ASEGURADORA)) +
+  geom_point() +
+  labs(title = "Patrón por aseguradora") +
+  theme_minimal()
+``` 
+
+Se compusieron diversos modelosagregando y quitando variables al modelo original. Sólo se anotaran los 3 más significantes, siendo el primero el modelo original, el segundo el modelo más complejo con una $R^2 ajustada$ mayor. Por último, el tercer modelo es un modelo más sencillo que es con el que nos decidimos quedar, debido a que la $R^2 ajustada$ no es tan difernte, es más sencillo y corrige algunos problemas que los dos primeros presentan.
+```{r}
+mod1<-lm(MarketShare~log(GWP)+CLM+log(SIZ)+LEV+LQ+log(ID)+PR+ROI+log(FDI)+HCI+GDP+EDUC+URBAN+GINI,data=muestra)
+mod2<-lm(MarketShare~log(GWP)+CLM+log(SIZ)+LEV+LQ+log(ID)+PR+ROI+HCI+EDUC+URBAN+GINI+I(log(GWP)*CLM)+I(URBAN*EDUC),data=muestra)
+mod3<-lm(MarketShare~log(GWP)+CLM+log(SIZ)+LEV+LQ+log(ID)+PR+ROI+log(FDI)+GDP+HCI+EDUC+GINI,data=muestra)
+#mod4<-lmrob(MarketShare~log(GWP)+CLM+log(SIZ)+LEV+LQ+log(ID)+PR+ROI+log(FDI)+GDP+HCI+EDUC+GINI,data=muestra)
+kable(tidy(mod3), digits=10, caption=
+"Resultados del modelo con mejor ajuste (mod3)")
+compare_performance(mod1,mod2,mod3,rank = TRUE)
+```
+```{r}
+plot(compare_performance(mod1,mod2,mod3,rank = TRUE))
+```
+Una vez establecidos los modelos,veremos graficamente el cumplimiento de los supuestos para un buen modelo de regresión.
+
+## Modelo 1
+
+```{r}
+qqnorm(mod1$residuals)
+qqline(mod1$residuals, col = 2)  
+
+plot(check_predictions(mod1))
+plot(check_collinearity(mod1))
+plot(check_normality(mod1))
+plot(check_outliers(mod1))
+
+residuos_estandarizados <- residuals(mod1) / sqrt(mean(residuals(mod1)^2))
+plot(fitted(mod3), residuos_estandarizados, 
+     xlab = "Valores Ajustados", ylab = "Residuos Estandarizados",
+     main = "Gráfico de Homocedasticidad")
+
+# Agrega una línea horizontal en y = 0
+abline(h = 0, col = "red", lty = 2)
+```
+
+## Modelo 2
+
+```{r}
+qqnorm(mod2$residuals)
+qqline(mod2$residuals, col = 2)  
+
+plot(check_predictions(mod2))
+plot(check_collinearity(mod2))
+plot(check_normality(mod2))
+plot(check_outliers(mod2))
+
+residuos_estandarizados <- residuals(mod2) / sqrt(mean(residuals(mod2)^2))
+plot(fitted(mod2), residuos_estandarizados, 
+     xlab = "Valores Ajustados", ylab = "Residuos Estandarizados",
+     main = "Gráfico de Homocedasticidad")
+
+# Agrega una línea horizontal en y = 0
+abline(h = 0, col = "red", lty = 2)
+```
+
+## Modelo 3
+
+```{r}
+qqnorm(mod3$residuals)
+qqline(mod3$residuals, col = 2)  
+
+plot(check_predictions(mod3))
+plot(check_collinearity(mod3))
+plot(check_normality(mod3))
+plot(check_outliers(mod3))
+
+residuos_estandarizados <- residuals(mod3) / sqrt(mean(residuals(mod3)^2))
+plot(fitted(mod3), residuos_estandarizados, 
+     xlab = "Valores Ajustados", ylab = "Residuos Estandarizados",
+     main = "Gráfico de Homocedasticidad")
+
+# Agrega una línea horizontal en y = 0
+abline(h = 0, col = "red", lty = 2)
+```
+Facilmente podemos darnos cuenta que los tres modelos cumplen con la normalidad en los residuos, homosedasticidad de la varianza y no hay correlación entre errores. La diferencia más notoria y por la que decidimos usar el modelo 3, fué porque ninguna de sus variables presenta colinealidad alta, agregado que tiene indicadores AIC y BIC bastante bajos; lo que es una buena seña. El criterio de la $R^2 ajustada$ se le dió menos peso debidoa que este criterio no penaliza que los otros dos modelos eran más complejos y usaban muchas más variables, lo que podría dar una falsa perspectiva de efectividad.
+
+# Explicación detallada con pruebas estadísticas
+
+# Normalidad de los errores
+
+## Prueba Anderson-Darling
+
+```{r}
+ad.test(mod3$residuals)
+```
+Al tomar un $\alpha=.01$, nuestro valor p es suficientemente pequeño que rechazamos que los errores NO se distribuyan de forma normal.
+
+## Gráfica de errores
+
+```{r}
+ehat3 <- resid(mod3)
+ebar3 <- mean(ehat3)
+sde3 <- sd(ehat3)
+hist(ehat3,col = 'grey',freq = FALSE, main = '',
+ ylab = 'density',xlab = 'ehat3')
+curve(dnorm(x,ebar3,sde3),col = 2, add = TRUE,
+ ylab = 'density', xlab='ehat3')
+
+```
+
+## Heterocedasticidad
+
+```{r}
+residuos<-residuals(mod3)
+div<-.5
+n<-length(residuos)
+n1<-floor(div*n)
+n2<-n-n1
+var_res1<-var(residuos[1:n1])
+var_res2<-var(residuos[(n1+1):n])
+est_prueb<-var_res2/var_res1
+df1<-n2-2
+df2<-n1-2
+valor_p<-1-pf(est_prueb,df1,df2)
+cat("Estadística de prueba de Goldfeld-Quandt:", est_prueb, "\n")
+cat("Valor p:", valor_p, "\n")
+```
+Al ser una valor p tan grande, rechazamos la heterocedasticidad.
+Otra prueba sería ver que loa cualtiles se encuentren al rededor de 0 y la media sea casi 0.
+```{r}
+quantile(mod3$residuals)
+mean(mod3$residuals)
+```
+## Independencia de errores
+
+Podemos percatarnos de un patrón aleatorio en el gráfico de los errores vs los valores devueltos por nuestra regresión
+```{r}
+plot(fitted(mod3),mod3$residuals, xlab="fitted values", ylab="residuals")
+```
+
+# Efectos de las variables
+
+A continuación se presentarán unas gráficas con los efectos de cada variable en el modelo 3 y sombreado a su alrededor estará el intervalo de confianza donde caen las observaciones.
+```{r}
+plot(effect(names(mod3$coefficients)[2],mod3))
+plot(effect(names(mod3$coefficients)[3],mod3))
+plot(effect(names(mod3$coefficients)[4],mod3))
+plot(effect(names(mod3$coefficients)[5],mod3))
+plot(effect(names(mod3$coefficients)[6],mod3))
+plot(effect(names(mod3$coefficients)[7],mod3))
+plot(effect(names(mod3$coefficients)[8],mod3))
+plot(effect(names(mod3$coefficients)[9],mod3))
+plot(effect(names(mod3$coefficients)[10],mod3))
+plot(effect(names(mod3$coefficients)[12],mod3))
+plot(effect(names(mod3$coefficients)[13],mod3))
+plot(effect(names(mod3$coefficients)[14],mod3))
+```
+
+## Intervalos de confianza
+
+```{r}
+confint(mod3,level = .95)
+```
+
+# Dstribución de la cuota de mercado de las aseguradoras de forma anual (2010-2022)
+
+```{r}
+for (i in 2010:2022) {
+  data<-matrix(c(muestra$MarketShare[muestra$YEAR==i],1-sum(muestra$MarketShare[muestra$YEAR==i])))
+  data
+  pie(data,labels = paste(c(unique(muestra$ASEGURADORA),'Otras'),data*100,'%'),main = paste("Cuota de mercado del ",i),col = c("blue2", "darkorange", "darkorchid4","springgreen4","#98F5FF","blue4","red","dodgerblue4","dodgerblue1","maroon","mediumorchid3"))
+  #legend("topleft", legend = c(unique(muestra$ASEGURADORA),'Otras'),
+   #    fill =  c("blue2", "darkorange", "darkorchid4","springgreen4","#98F5FF","blue4","red","dodgerblue4","dodgerblue1","maroon","mediumorchid3"))
+}
+``` 
+```{r}
+Year<-unique(muestra$YEAR)
+AXA<-muestra$MarketShare[muestra$ASEGURADORA=="AXA"]
+GNP<-muestra$MarketShare[muestra$ASEGURADORA=="GNP"]
+Qualitas<-muestra$MarketShare[muestra$ASEGURADORA=="Quálitas"]
+HDI<-muestra$MarketShare[muestra$ASEGURADORA=="HDI"]
+CHUBB<-muestra$MarketShare[muestra$ASEGURADORA=="CHUBB"]
+Zurich<-muestra$MarketShare[muestra$ASEGURADORA=="Zurich"]
+Banorte<-muestra$MarketShare[muestra$ASEGURADORA=="Banorte"]
+Inbursa<-muestra$MarketShare[muestra$ASEGURADORA=="Inbursa"]
+BBVA<-muestra$MarketShare[muestra$ASEGURADORA=="BBVA"]
+Atlas<-muestra$MarketShare[muestra$ASEGURADORA=="Atlas"]
+df<-data.frame(cbind(Year,AXA,GNP,Qualitas,HDI,CHUBB,Zurich,Banorte,Inbursa,BBVA,Atlas))
+cols<- c("blue2", "darkorange", "darkorchid4","springgreen4",
+              "#98F5FF","blue4","red","dodgerblue4","dodgerblue1",
+              "maroon","mediumorchid3")
+opar <- par(no.readonly = TRUE)
+
+par(mar = c(5, 5, 4, 7))
+areaplot(df$Year,df[,c(2,3,4,5,6,7,8,9,10,11)],col=cols,xlab = "Año",
+         ylab = "Cuota de Mercado")
+
+legend(x = "topright",
+       inset = c(-0.20, 0),
+       legend = unique(muestra$ASEGURADORA),
+       fill = cols,
+       bg = "white", 
+       bty = "o",
+       cex = 0.65,
+       xpd = TRUE)
+
+on.exit(par(opar))
+```
+```{r}
+prediction<-muestra
+prediction$MarketShare<-as.vector(mod3$fitted.values)
+
+Year<-unique(prediction$YEAR)
+AXA<-prediction$MarketShare[prediction$ASEGURADORA=="AXA"]
+GNP<-prediction$MarketShare[prediction$ASEGURADORA=="GNP"]
+Qualitas<-prediction$MarketShare[prediction$ASEGURADORA=="Quálitas"]
+HDI<-prediction$MarketShare[prediction$ASEGURADORA=="HDI"]
+CHUBB<-prediction$MarketShare[prediction$ASEGURADORA=="CHUBB"]
+Zurich<-prediction$MarketShare[prediction$ASEGURADORA=="Zurich"]
+Banorte<-prediction$MarketShare[prediction$ASEGURADORA=="Banorte"]
+Inbursa<-prediction$MarketShare[prediction$ASEGURADORA=="Inbursa"]
+BBVA<-prediction$MarketShare[prediction$ASEGURADORA=="BBVA"]
+Atlas<-prediction$MarketShare[prediction$ASEGURADORA=="Atlas"]
+df<-data.frame(cbind(Year,AXA,GNP,Qualitas,HDI,CHUBB,Zurich,Banorte,Inbursa,BBVA,Atlas))
+cols<- c("blue2", "darkorange", "darkorchid4","springgreen4",
+              "#98F5FF","blue4","red","dodgerblue4","dodgerblue1",
+              "maroon","mediumorchid3")
+opar <- par(no.readonly = TRUE)
+
+par(mar = c(5, 5, 4, 7))
+areaplot(df$Year,df[,c(2,3,4,5,6,7,8,9,10,11)],col=cols,xlab = "Año",
+         ylab = "Cuota de Mercado")
+
+legend(x = "topright",
+       inset = c(-0.20, 0),
+       legend = unique(prediction$ASEGURADORA),
+       fill = cols,
+       bg = "white", 
+       bty = "o",
+       cex = 0.65,
+       xpd = TRUE)
+
+on.exit(par(opar))
+``` 
